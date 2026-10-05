@@ -1373,6 +1373,21 @@ def ToMixedPrecision(mixed_precision_type="float16", missing_op_mode=1):
     return _ffi_api.ToMixedPrecision(mixed_precision_type, missing_op_mode)
 
 
+def FoldMixedPrecisionCasts():
+    """Fold redundant cast operations resulting from mixed precision transformations.
+
+    This pass removes identical casts and lossless round-trip casts 
+    (e.g., FP16 -> FP32 -> FP16) to optimize the graph while strictly 
+    preserving intentionally lossy quantization casts (e.g., FP32 -> FP16 -> FP32).
+
+    Returns
+    -------
+    ret: tvm.transform.Pass
+        The registered pass for cast folding.
+    """
+    return _ffi_api.FoldMixedPrecisionCasts()
+
+
 def SplitArgs(max_function_args):
     """Split function with huge number of arguments to smaller pieces.
 
