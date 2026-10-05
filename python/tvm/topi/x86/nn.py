@@ -134,3 +134,61 @@ def schedule_batch_norm(outs):
         s[div].compute_inline()
         s[substract].compute_inline()
     return s
+
+def schedule_lp_norm(outs):
+    # out = sum(abs(x)^(ord))^(1 / ord)
+    # return: cast, scalar
+   
+    out = outs.op if isinstance(outs, te.tensor.Tensor) else outs[0].op
+    s = te.create_schedule(out)
+    visited = set()
+    
+    def _traverse(op):
+        # If the op is visited, scheduling is not applied to the op again
+        # Else, the op is appended to set
+        if op in visited:
+            return
+        visited.add(op)
+        
+        # recursively scheduled compute ops
+        for tensor in op.input_tensors:
+            if isinstance(tensor.op, te.ComputeOp):
+                _traverse(tensor.op)
+
+        # Scheduling applied only to ops (exempted placeholders)
+        if isinstance(op, te.ComputeOp):
+            # Inlining not applied to output op (out)
+            # so, intermediate injective ops are inlined
+            if op != out:
+                # Reduction axis is null for an injective op
+                if len(op.reduce_axis) == 0:
+                    s[op].compute_inline() # Inline performed
+                else:
+                    # Reduction op
+                    if len(op.axis) > 0: 
+                        # Fusion and parallelism applied only for tensors (not scalars)
+                        fused = s[op].fuse(*op.axis)
+                        s[op].parallel(fused)
+            else:
+                # the last op of vector_norm is cast; this is an injective (element-wise) op
+ 
+                # if len(op.axis) >= 1:
+                #     l = op.axis[-1]
+                #     lo, li = s[op].split(l, factor=16)
+                #     s[op].vectorize(li)
+
+                # if len(op.axis) >=3:
+                #     fused = s[op].fuse(op.axis[0], op.axis[1])
+                #     s[op].parallel(fused)
+                        
+                # # Parallelize outer loops
+                # if len(op.axis) == 1:
+                #     s[op].parallel(lo)
+                if len(op.axis) == 1:
+                    s[op].parallel(op.axis[0])
+                else:
+                    fused = s[op].fuse(*op.axis)
+                    s[op].parallel(fused)
+                        
+    _traverse(out)
+    return s

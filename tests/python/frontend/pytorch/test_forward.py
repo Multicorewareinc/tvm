@@ -187,7 +187,8 @@ def verify_model(
 
     for arg in mod["main"].params[: len(input_names)]:
         assert arg.name_hint in input_names
-    compiled_input = dict(zip(input_names, [inp.clone().cpu().numpy() for inp in baseline_input]))
+    
+    # compiled_input = dict(zip(input_names, [inp.clone().cpu().numpy() for inp in baseline_input]))
 
     targets = ["llvm"]
     if not cpu_only:
@@ -198,6 +199,17 @@ def verify_model(
             if not tvm.runtime.enabled(target):
                 continue
             dev = tvm.device(target, 0)
+
+            # alternate script for bf16 support
+            compiled_input = {}
+            for name, inp in zip(input_names, baseline_input):
+                if inp.dtype == torch.bfloat16:
+                    pt_dev = "cuda" if target == "cuda" else "cpu"
+                    tensor_on_dev = inp.to(pt_dev).contiguous()
+                    compiled_input[name] = tvm.nd.from_dlpack(torch.to_dlpack(tensor_on_dev))
+                else:
+                    compiled_input[name] = inp.clone().cpu().numpy()
+
             exe = relay.create_executor(
                 kind, mod=mod, params=params, device=dev, target=target
             ).evaluate()
@@ -1412,6 +1424,43 @@ def test_forward_contiguous():
 
     input_data = torch.rand(input_shape).float()
     verify_model(Contiguous1().float().eval(), input_data=input_data)
+
+class VectorNorm(torch.nn.Module):
+    def __init__(self, ord=2, axis=None, keepdims=False, dtype=None):
+        super().__init__()
+        self.ord = ord
+        self.axis = axis
+        self.keepdims = keepdims
+        self.dtype = dtype
+
+    def forward(self, x):
+        res = torch.linalg.vector_norm(
+            x, self.ord, self.axis, self.keepdims, dtype=self.dtype
+        )
+        # casting bf16 to f32 since numpy does not support bf16
+        return res.to(torch.float32) if res.dtype==torch.bfloat16 else res
+
+@pytest.mark.parametrize("model, input_data", 
+    [
+    (VectorNorm(np.int32(2), None, False, torch.float64).eval(), torch.rand([9], dtype=torch.float64)),
+    (VectorNorm().eval(), torch.rand([1,2,3,4], dtype=None)),
+    (VectorNorm(float("inf"), dtype=torch.bfloat16).eval(), torch.rand([6],dtype=torch.bfloat16)),
+    (VectorNorm(3.5).eval(), torch.rand([3,6,7],dtype=None)),
+    # Layout testing couldn't be added in this test script since layout conversion inference could be done only with a minimum of two operators.
+    # So, removing permute() added to test cases
+    (VectorNorm(axis=2, dtype=torch.float32).eval(), torch.randn([2,6,9,6,2],dtype=torch.float32)),
+    (VectorNorm(5.6, keepdims=False).eval(), torch.rand([1,4,3],dtype=None)),
+    (VectorNorm(-np.inf, (-1,-2), dtype=torch.float16).eval(), torch.rand([2,5],dtype=torch.float16)),
+    (VectorNorm(2, keepdims=True).eval(), torch.rand([9,10],dtype=None)),
+    (VectorNorm(axis=(0,1,2,3), keepdims=True, dtype=None).eval(), torch.randn([4,5,6,7,1,3,4],dtype=None)),
+    (VectorNorm(ord=-4.2, keepdims=True).eval(), torch.randn([3,8,4,1],dtype=None)),
+    (VectorNorm(ord=-6.9, keepdims=True).eval(), torch.randn([1,3,224,224],dtype=torch.bfloat16)),
+    (VectorNorm(ord=-float("inf"), keepdims=True).eval(), torch.randn([1,224,224,3],dtype=None)),
+    (VectorNorm(ord=-6.9).eval(), torch.tensor(-5.0)),
+    (VectorNorm(ord=0, axis=None).eval(), torch.Tensor([-1,-2,-3]))
+    ])
+def test_custom_linalg_vector_norm(model, input_data):
+    verify_model(model, input_data)
 
 
 @tvm.testing.uses_gpu

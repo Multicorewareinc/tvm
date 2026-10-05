@@ -1960,6 +1960,61 @@ def dropout_raw(data, rate=0.5):
     return _make.dropout(data, rate)
 
 
+import tvm
+from tvm import relay
+def lp_norm(
+    data, ord, axis, keepdims, dtype
+):
+    r"""
+    Computes the vector L-p norm of the input tensor.
+    The function computes the norm of the input tensor. If `axis` is not specified, 
+    the input tensor is flattened before the norm is computed. If `axis` is an integer
+    or a tuple of integers, the norm is computed over those dimensions.
+    The `ord` attribute defines the type of vector norm computed.
+    Supported values for `ord`:
+    - `ord = 2` (default): 2-norm (Euclidean norm)
+    - `ord = inf`: Computes `max(abs(x))`
+    - `ord = -inf`: Computes `min(abs(x))`
+    - `ord = 0`: Computes `sum(x != 0)`
+    - `ord = other (int or float)`: Computes the p-norm according to the formula:
+    .. math::
+        out = sum(abs(x)^{ord})^{(1 / ord)}
+    """
+    # if ord is a constant (TVM NDArray), extracting it
+    if isinstance(ord, Constant):
+        # converting to numpy and extracting it
+        ord = ord.data.numpy().item()
+
+    # if ord is an integer, converting to float (since ord is defaulted to float)
+    elif isinstance(ord, int):
+        ord = float(ord)
+
+    # if ord is an expression, creating conditions to handle dynamic ord values
+    elif isinstance(ord, Expr):
+        print("\nord check started!!")
+        ord_float = relay.cast(ord, "float32")
+
+        cond_0 = relay.equal(ord_float, relay.const(0.0, "float32"))
+        cond_inf = relay.equal(ord_float, relay.const(float("inf"), dtype="float32"))
+        cond_neg_inf = relay.equal(ord_float, relay.const(float("-inf"), dtype="float32"))
+
+        branch_0 = _make.lp_norm(data, 0.0, axis, keepdims, dtype)
+        branch_inf = _make.lp_norm(data, float("inf"), axis, keepdims, dtype)
+        branch_neg_inf = _make.lp_norm(data, float("-inf"), axis, keepdims, dtype)
+        branch_p = _dyn_make.lp_norm(data, ord, axis, keepdims, dtype)
+
+        print("\nord check ended!!")
+
+        return relay.If(cond_0, branch_0, 
+                        relay.If(cond_inf, branch_inf,
+                        relay.If(cond_neg_inf, branch_neg_inf, 
+                        branch_p)))
+        
+    else:
+        pass
+
+    return _make.lp_norm(data, ord, axis, keepdims, dtype)
+
 def batch_norm(
     data, gamma, beta, moving_mean, moving_var, axis=1, epsilon=1e-5, center=True, scale=True
 ):

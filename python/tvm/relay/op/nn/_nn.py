@@ -142,6 +142,10 @@ def legalize_batch_matmul(attrs, inputs, types):
 reg.register_strategy("nn.batch_matmul", strategy.batch_matmul_strategy)
 
 
+# lp_norm
+reg.register_strategy("nn.lp_norm", strategy.lp_norm_strategy)
+
+
 # batch_norm
 reg.register_strategy("nn.batch_norm", strategy.batch_norm_strategy)
 
@@ -1549,6 +1553,63 @@ def dilate_shape_func(attrs, inputs, _):
     Shape function for dilate op.
     """
     return [_dilate_shape_func(inputs[0], convert(attrs.strides))]
+
+
+# lp_norm
+def _create_axis_record(attrs, inputs):
+    axes = attrs.axis if attrs.axis is None else list(get_const_tuple(attrs.axis))
+    keepdims = convert(attrs.keepdims) > 0
+    shape_size = inputs[0].shape[0].value
+
+    # initializing a new list with -1 values
+    # with same shape size as that of input data
+    axis_record = [-1] * shape_size
+
+    # if axes is None, then re-assigning it to all dimensions
+    if axes is None:
+        axes = list(range(shape_size))
+
+    # converting negative axis values to positive
+    for i, axis in enumerate(axes):
+        if axis < 0:
+            axes[i] = shape_size + axis
+
+    # re-assigning those values (not to be reduced) of axis in axis_record list 
+    for i in range(shape_size):
+        if i not in axes:
+            axis_record[i] = i
+
+    # removing -1 values if keepdims is False via new list tmp
+    if not keepdims:
+        tmp = []
+        for i in axis_record:
+            if i >= 0:
+                tmp.append(i)
+        axis_record = tmp
+
+    return axis_record
+
+
+@script
+def _lp_norm_shape_func(data_shape, axis_record):
+    out = output_tensor((len(axis_record),), "int64")
+    # computing output shape with axis_record list from previous function
+    for i in const_range(len(axis_record)):
+        if axis_record[i] >= 0:
+            out[i] = data_shape[axis_record[i]]
+        else:
+            out[i] = int64(1)
+
+    return out
+
+
+@reg.register_shape_func("nn.lp_norm", False)
+def lp_norm_shape_func(attrs, inputs, _):
+    """
+    Shape function for lp_norm op.
+    """
+    axis_record = _create_axis_record(attrs, inputs)
+    return [_lp_norm_shape_func(inputs[0], convert(axis_record))]
 
 
 reg.register_shape_func("nn.bias_add", False, elemwise_shape_func)

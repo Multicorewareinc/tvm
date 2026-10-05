@@ -3919,6 +3919,21 @@ class PyTorchOpConverter:
             reci_ord,
         )
 
+    # custom defined linalg_vector_norm (rewritten predefined linalg_vector_norm with modifications)
+    def linalg_vector_norm(self, inputs, input_types):
+        data = inputs[0]
+        ord = inputs[1] if (len(inputs) > 1 and inputs[1] is not None) else 2
+        axis = inputs[2] if (len(inputs) > 2 and inputs[2] is not None) else None
+        keepdims = inputs[3] if (len(inputs) > 3 and inputs[3] is not None) else False
+        dtype = _convert_dtype_value(inputs[4]) if (len(inputs) > 4 and inputs[4] is not None) else None
+        return _op.nn.lp_norm(
+            data,
+            ord,
+            axis,
+            keepdims,
+            dtype
+    )
+
     def scaled_dot_product_attention(self, inputs, input_types):
         query = inputs[0]
         key = inputs[1]
