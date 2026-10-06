@@ -22,7 +22,7 @@ import re
 from tvm import relay, topi
 from tvm.runtime import convert
 from tvm.te.hybrid import script
-from tvm.topi.utils import get_const_tuple
+from tvm.topi.utils import get_const_tuple, get_const_int
 from tvm.topi.nn.utils import get_pad_tuple
 
 from ....ir import container

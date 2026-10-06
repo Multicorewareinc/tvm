@@ -61,9 +61,7 @@ def lp_norm(data, ord, axis, keepdims, dtype):
     
     data_cast = topi.abs(data_cast)
 
-    # if ndim == 0 (scalar), then the result of vector_norm is just the absolute value of itself
-    data_cast = topi.abs(data_cast)
-
+    # scalar input handling in vector_norm
     if ndim == 0:
         # Static ord
         if isinstance(ord, (int, float, tvm.tir.IntImm, tvm.tir.FloatImm)):

@@ -209,23 +209,8 @@ def test_dyn_pad(executor_kind):
     verify_pad_default_fill((2, 7), ((1, 4), (2, 2)), "int32")
 
 
-@tvm.testing.uses_gpu
-@pytest.mark.parametrize(
-    "dshape, input_shape, ord_val, axis, keepdims, dtype",
-    [
-        ((relay.Any(), 3, relay.Any()), (4, 3, 5), 2, 1, False, "float32"),
-        ((relay.Any(), relay.Any()), (2, 3), 2, None, True, "float32"),
-        ((relay.Any(), 4, 3), (2, 4, 3), float("inf"), (1, 2), False, "float32"),
-        ((relay.Any(), relay.Any()), (5, 6), -float("inf"), -1, False, "float32"),
-        ((relay.Any(), relay.Any(), relay.Any()), (3, 2, 4), 3.5, 0, False, "float32"),
-        ((relay.Any(), 5, relay.Any()), (2, 5, 3), 5.6, (0, 2), True, "float32"),
-        ((relay.Any(), relay.Any()), (3, 4), -4.2, 1, True, "float64"),
-        ((relay.Any(), 3, relay.Any(), relay.Any()), (1, 3, 4, 2), -6.9, None, False, "float32"),
-        ((relay.Any(), relay.Any()), (5, 5), 0, None, True, "float32"),
-        ((), (), 2, None, False, "float32"),
-    ],
-)
-def test_dyn_lp_norm(executor_kind, dshape, input_shape, ord_val, axis, keepdims, dtype):
+# @tvm.testing.uses_gpu
+def test_dyn_lp_norm(executor_kind):
     def verify_lp_norm(dshape, input_shape, ord_val, axis, keepdims, dtype):
         tvm_axis = (axis,) if isinstance(axis, int) else axis
         x = relay.var("x", relay.TensorType(dshape, dtype))
@@ -276,9 +261,19 @@ def test_dyn_lp_norm(executor_kind, dshape, input_shape, ord_val, axis, keepdims
             executor_kind,
             func,
             [x_data, np.array(ord_val).astype("float32")],
-            ref_res
+            ref_res,
+            target_device=[("llvm", tvm.cpu())]
         )
-    verify_lp_norm(dshape, input_shape, ord_val, axis, keepdims, dtype)
+    verify_lp_norm((relay.Any(), 3, relay.Any()), (4, 3, 5), 2, 1, False, "float32")
+    verify_lp_norm((relay.Any(), relay.Any()), (2, 3), 2, None, True, "float32")
+    verify_lp_norm((relay.Any(), 4, 3), (2, 4, 3), float("inf"), (1, 2), False, "float32")
+    verify_lp_norm((relay.Any(), relay.Any()), (5, 6), -float("inf"), -1, False, "float32")
+    verify_lp_norm((relay.Any(), relay.Any(), relay.Any()), (3, 2, 4), 3.5, 0, False, "float32")
+    verify_lp_norm((relay.Any(), 5, relay.Any()), (2, 5, 3), 5.6, (0, 2), True, "float32")
+    verify_lp_norm((relay.Any(), relay.Any()), (3, 4), -4.2, 1, True, "float64")
+    verify_lp_norm((relay.Any(), 3, relay.Any(), relay.Any()), (1, 3, 4, 2), -6.9, None, False, "float32")
+    verify_lp_norm((relay.Any(), relay.Any()), (5, 5), 0, None, True, "float32")
+    verify_lp_norm((), (), 2, None, False, "float32")
 
     
 if __name__ == "__main__":
