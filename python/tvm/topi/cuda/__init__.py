@@ -39,6 +39,7 @@ from .injective import schedule_injective, schedule_elemwise, schedule_broadcast
 from .dense import *
 from .pooling import *
 from .nn import schedule_lrn
+from .nn import schedule_lp_norm
 from .batch_matmul import *
 from .batch_matmul_tensorcore import *
 from .vision import *
