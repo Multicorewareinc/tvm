@@ -783,18 +783,36 @@ InferCorrectLayoutOutput LpNormInferCorrectLayout(const Attrs& attrs,
   param->axis = Array<Integer>(resolved_dims);
 
   // if new_in_layouts are defined, tries to modify the layout
+  // considering split layout (such as NCHW16c)
   if (new_in_layouts.defined() && old_in_layouts.defined()) {
-    std::vector<Integer> new_dims;
-    for (Integer axis_val : param->axis) {
-      int axis_val_int = axis_val->value;
+    std::unordered_set<std::string> reduced_dims;
+    for (const Integer& axis : param->axis) {
+      int axis_val = axis->value;
       // confirming if each dim is positive and in the range
-      ICHECK_GE(axis_val_int, 0);
-      ICHECK_LT(axis_val_int, old_in_layouts[0].ndim());
+      ICHECK_GE(axis_val, 0);
+      ICHECK_LT(axis_val, static_cast<int>(data_shape.size()));
 
-      const auto& lp_axis_dim = old_in_layouts[0][axis_val_int];
-      auto new_index = new_in_layouts[0].IndexOf(lp_axis_dim);
-      new_dims.push_back(Integer(new_index));
+      reduced_dims.emplace(old_in_layouts[0][axis_val].name());
     }
+
+    std::vector<Integer> new_dims;
+    for (size_t axis_index = 0; axis_index < new_in_layouts[0].axes.size(); ++axis_index) {
+      const auto& layout_axis = LayoutAxis::Get(new_in_layouts[0].axes[axis_index]);
+      const std::string& layout_dim = layout_axis.name();
+
+      if (layout_axis.IsPrimal()) {
+        if (reduced_dims.count(layout_dim)) {
+          new_dims.push_back(Integer(axis_index));
+        }
+      } else {
+        auto primal_dim = layout_axis.ToPrimal().name();
+
+        if (reduced_dims.count(primal_dim)) {
+          new_dims.push_back(Integer(axis_index));
+        }
+      }
+    }
+
     // reassigning dim with new dimension(s)
     param->axis = Array<Integer>(new_dims);
     ret = new_in_layouts[0];
@@ -804,7 +822,7 @@ InferCorrectLayoutOutput LpNormInferCorrectLayout(const Attrs& attrs,
   // output layout: same as input if keepdims, else Undef
   Layout out_layout = param->keepdims ? ret : Layout::Undef();
 
-  return InferCorrectLayoutOutput({ret}, {out_layout}, Attrs(param));
+  return InferCorrectLayoutOutput({ret, Layout::Undef()}, {out_layout}, Attrs(param));
 }
 
 bool LpNormRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,

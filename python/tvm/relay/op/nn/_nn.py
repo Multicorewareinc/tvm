@@ -1558,7 +1558,7 @@ def dilate_shape_func(attrs, inputs, _):
 # lp_norm
 def _create_axis_record(attrs, inputs):
     axes = attrs.axis if attrs.axis is None else list(get_const_tuple(attrs.axis))
-    keepdims = convert(attrs.keepdims) > 0
+    keepdims = get_const_int(convert(attrs.keepdims)) > 0
     shape_size = inputs[0].shape[0].value
 
     # initializing a new list with -1 values

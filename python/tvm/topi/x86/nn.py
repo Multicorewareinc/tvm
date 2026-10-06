@@ -187,8 +187,9 @@ def schedule_lp_norm(outs):
                 if len(op.axis) == 1:
                     s[op].parallel(op.axis[0])
                 else:
-                    fused = s[op].fuse(*op.axis)
-                    s[op].parallel(fused)
+                    elif len(op.axis) > 1:
+                        fused = s[op].fuse(*op.axis)
+                        s[op].parallel(fused)
                         
     _traverse(out)
     return s

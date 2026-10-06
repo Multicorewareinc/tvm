@@ -1980,6 +1980,8 @@ def lp_norm(
     .. math::
         out = sum(abs(x)^{ord})^{(1 / ord)}
     """
+
+    axis = [axis] if isinstance(axis, int) else axis
     # if ord is a constant (TVM NDArray), extracting it
     if isinstance(ord, Constant):
         # converting to numpy and extracting it
@@ -1991,7 +1993,6 @@ def lp_norm(
 
     # if ord is an expression, creating conditions to handle dynamic ord values
     elif isinstance(ord, Expr):
-        print("\nord check started!!")
         ord_float = relay.cast(ord, "float32")
 
         cond_0 = relay.equal(ord_float, relay.const(0.0, "float32"))
@@ -2002,8 +2003,6 @@ def lp_norm(
         branch_inf = _make.lp_norm(data, float("inf"), axis, keepdims, dtype)
         branch_neg_inf = _make.lp_norm(data, float("-inf"), axis, keepdims, dtype)
         branch_p = _dyn_make.lp_norm(data, ord, axis, keepdims, dtype)
-
-        print("\nord check ended!!")
 
         return relay.If(cond_0, branch_0, 
                         relay.If(cond_inf, branch_inf,

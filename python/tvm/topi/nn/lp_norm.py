@@ -62,8 +62,28 @@ def lp_norm(data, ord, axis, keepdims, dtype):
     data_cast = topi.abs(data_cast)
 
     # if ndim == 0 (scalar), then the result of vector_norm is just the absolute value of itself
+    data_cast = topi.abs(data_cast)
+
     if ndim == 0:
-        return topi.cast(data_cast, "bfloat16") if target_dtype == "bfloat16" else data_cast
+        # Static ord
+        if isinstance(ord, (int, float, tvm.tir.IntImm, tvm.tir.FloatImm)):
+            ord_val = ord.value if hasattr(ord, "value") else ord
+
+            if ord_val == 0:
+                nonzero = topi.cast(
+                    topi.not_equal(data_cast, tir.const(0, compute_dtype)),
+                    compute_dtype
+                )
+                return nonzero
+            return data_cast
+
+        # Dynamic ord
+        nonzero = topi.cast(
+            topi.not_equal(data_cast, tir.const(0, compute_dtype)),
+            compute_dtype
+        )
+
+        return topi.where(ord == 0, nonzero, data_cast)
 
     # assigning all dim values to axes if dim is None or empty tuple/list
     if axis is None or (isinstance(axis, (list, tuple, tvm.ir.Array)) and len(axis) == 0):

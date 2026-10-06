@@ -80,7 +80,7 @@ register_injective_schedule("dyn.nn.upsampling3d")
 register_broadcast_schedule("dyn.nn.pad")
 
 @generic_func
-def lp_norm_schedule(outs, target):
+def lp_norm_schedule(attrs, outs, target):
     return topi.generic.schedule_lp_norm(outs)
 
 @lp_norm_schedule.register(["cpu"])
