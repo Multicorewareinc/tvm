@@ -82,27 +82,39 @@ def schedule_lp_norm(outs):
 
     _traverse(out)
 
-    if reduce_op is not None and len(reduce_op.reduce_axis) > 0:
+    if reduce_op is not None:
         # Fusing reduction axes
         fused_reduce = s[reduce_op].fuse(*reduce_op.reduce_axis)
         ko, ki = s[reduce_op].split(fused_reduce, factor=32)
+
         # Parallelization via rfactor
         data_out_rf = s.rfactor(reduce_op.output(0), ki)
         tx = s[reduce_op].op.reduce_axis[0]
         thread_x = te.thread_axis((0, 32), "threadIdx.x")
         s[reduce_op].bind(tx, thread_x)
         s[data_out_rf].compute_at(s[reduce_op], tx)
+
+        s[reduce_op].set_store_predicate(thread_x.var.equal(0))
+        if reduce_op != out:
+            s[out].set_store_predicate(thread_x.var.equal(0))
+
         # Scheduling Output Dimensions
         if len(out.axis) > 0:
             fused_outer = s[out].fuse(*out.axis)
             bx, outer_in = s[out].split(fused_outer, factor=16)
             thread_y = te.thread_axis((0, 16), "threadIdx.y")
             block_x = te.thread_axis("blockIdx.x")
+
             s[out].bind(outer_in, thread_y)
             s[out].bind(bx, block_x)
             s[reduce_op].compute_at(s[out], outer_in)
-        else:
-            # Global reduction (scalar output)
-            s[out].bind(fused_reduce, te.thread_axis("blockIdx.x"))
+    else:
+        # No reduction: injective CUDA scheduling
+        if len(out.axis) > 0:
+            fused = s[out].fuse(*out.axis)
+            bx, tx = s[out].split(fused, factor=max_threads)
+            
+            s[out].bind(bx, te.thread_axis("blockIdx.x"))
+            s[out].bind(tx, te.thread_axis("threadIdx.x"))
         
     return s
