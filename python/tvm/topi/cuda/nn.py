@@ -72,13 +72,13 @@ def schedule_lp_norm(outs):
             if isinstance(tensor.op, te.ComputeOp):
                 _traverse(tensor.op)
 
-        if isinstance(op, te.ComputeOp) and op != out:
-            # Inline all injective ops (abs, pow, root_power)
-            if len(op.reduce_axis) == 0:
-                s[op].compute_inline()
-            else:
-                # Capture the single reduction op (sum, max, or min)
+        if isinstance(op, te.ComputeOp):
+            # Capture the reduction op 
+            if len(op.reduce_axis) > 0:
                 reduce_op = op
+            elif op != out:
+                # Inline non-output injective ops
+                s[op].compute_inline()
 
     _traverse(out)
 
