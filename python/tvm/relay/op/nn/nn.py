@@ -1960,7 +1960,6 @@ def dropout_raw(data, rate=0.5):
     return _make.dropout(data, rate)
 
 
-import tvm
 from tvm import relay
 def lp_norm(
     data, ord, axis, keepdims, dtype

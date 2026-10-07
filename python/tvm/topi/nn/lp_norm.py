@@ -9,6 +9,41 @@ from tvm.te import Tensor
 from tvm.tir import PrimExpr
 
 
+# helper functions to avoid repeated computations to be mentioned
+def _lp_norm(data, ord, axis, keepdims, compute_dtype):
+    if ord==0:
+        nonzero = topi.cast(
+            topi.not_equal(data, tir.const(0, compute_dtype)),
+            compute_dtype
+        )
+        result = topi.sum(nonzero, axis, keepdims)
+    elif math.isinf(ord):
+        if ord>0:
+            result = topi.max(data, axis, keepdims)
+        else:
+            result = topi.min(data, axis, keepdims)
+    else:
+        result = _lp_norm_p(data, ord, axis, keepdims, compute_dtype)
+
+    return result
+
+
+def _lp_norm_p(data, ord, axis, keepdims, compute_dtype):
+    if isinstance(ord, (int, float)):
+        ord_const = tir.const(ord, compute_dtype)
+        inv_ord_const = tir.const(1.0 / ord, compute_dtype)
+        powered = topi.power(data, ord_const)
+        summed = topi.sum(powered, axis, keepdims=keepdims)
+        result = topi.power(summed, inv_ord_const)
+    else:
+        inv_ord = tir.const(1.0, compute_dtype) / ord
+        powered = topi.power(data, ord)
+        summed = topi.sum(powered, axis, keepdims=keepdims)
+        result = topi.power(summed, inv_ord)
+
+    return result
+
+
 def lp_norm(data, ord, axis, keepdims, dtype):
     """
     Computes the vector Lp norm of a tensor.
@@ -126,37 +161,6 @@ def lp_norm(data, ord, axis, keepdims, dtype):
             raise ValueError("Duplicate dimensions are not allowed.")
 
         axes = normalized_axes
-
-    # helper functions to avoid repeated computations to be mentioned
-    def _lp_norm(data, ord, axis, keepdims, compute_dtype):
-        if ord==0:
-            nonzero = topi.cast(
-                topi.not_equal(data, tir.const(0, compute_dtype)),
-                compute_dtype
-            )
-            result = topi.sum(nonzero, axis, keepdims)
-        elif math.isinf(ord):
-            if ord>0:
-                result = topi.max(data, axis, keepdims)
-            else:
-                result = topi.min(data, axis, keepdims)
-        else:
-            result = _lp_norm_p(data, ord, axis, keepdims, compute_dtype)
-        return result
-
-    def _lp_norm_p(data, ord, axis, keepdims, compute_dtype):
-        if isinstance(ord, (int, float)):
-            ord_const = tir.const(ord, compute_dtype)
-            inv_ord_const = tir.const(1.0 / ord, compute_dtype)
-            powered = topi.power(data, ord_const)
-            summed = topi.sum(powered, axis=axes, keepdims=keepdims)
-            result = topi.power(summed, inv_ord_const)
-        else:
-            inv_ord = tir.const(1.0, compute_dtype) / ord
-            powered = topi.power(data, ord)
-            summed = topi.sum(powered, axis=axes, keepdims=keepdims)
-            result = topi.power(summed, inv_ord)
-        return result
 
     #if ord is static
     if isinstance(ord, (int, float, tvm.tir.IntImm, tvm.tir.FloatImm)):
