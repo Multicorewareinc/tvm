@@ -33,12 +33,12 @@ def _lp_norm_p(data, ord, axis, keepdims, compute_dtype):
         ord_const = tir.const(ord, compute_dtype)
         inv_ord_const = tir.const(1.0 / ord, compute_dtype)
         powered = topi.power(data, ord_const)
-        summed = topi.sum(powered, axis, keepdims=keepdims)
+        summed = topi.sum(powered, axis, keepdims)
         result = topi.power(summed, inv_ord_const)
     else:
         inv_ord = tir.const(1.0, compute_dtype) / ord
         powered = topi.power(data, ord)
-        summed = topi.sum(powered, axis, keepdims=keepdims)
+        summed = topi.sum(powered, axis, keepdims)
         result = topi.power(summed, inv_ord)
 
     return result
@@ -160,17 +160,15 @@ def lp_norm(data, ord, axis, keepdims, dtype):
         if len(set(normalized_axes)) != len(normalized_axes):
             raise ValueError("Duplicate dimensions are not allowed.")
 
-        axes = normalized_axes
-
     #if ord is static
     if isinstance(ord, (int, float, tvm.tir.IntImm, tvm.tir.FloatImm)):
         ord_val = ord.value if hasattr(ord, "value") else ord
         # ord check
-        result = _lp_norm(data_cast, ord_val, axes, keepdims, compute_dtype)
+        result = _lp_norm(data_cast, ord_val, normalized_axes, keepdims, compute_dtype)
 
     # if ord value is dynamic (not zero, inf or -inf), this condition is reached
     else:
-        result = _lp_norm_p(data_cast, ord, axes, keepdims, compute_dtype)
+        result = _lp_norm_p(data_cast, ord, normalized_axes, keepdims, compute_dtype)
 
     # typecasting back to original data type 
     if target_dtype == "bfloat16":
