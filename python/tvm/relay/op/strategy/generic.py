@@ -954,6 +954,25 @@ def batch_matmul_strategy(attrs, inputs, out_type, target):
     )
     return strategy
 
+#lp_norm
+def wrap_compute_lp_norm(topi_compute):
+    """wrap lp_norm topi compute"""
+    def _compute_lp_norm(attrs, inputs, out_type):
+        return [topi_compute(*inputs, attrs.ord, attrs.axis, attrs.keepdims, attrs.dtype)]
+    return _compute_lp_norm
+
+
+@override_native_generic_func("lp_norm_strategy")
+def lp_norm_strategy(attrs, inputs, out_type, target):
+    """lp_norm generic strategy"""
+    strategy = _op.OpStrategy()
+    strategy.add_implementation(
+        wrap_compute_lp_norm(topi.nn.lp_norm),
+        wrap_topi_schedule(topi.generic.schedule_lp_norm),
+        name="lp_norm.generic",
+    )
+    return strategy
+
 
 # batch_norm
 def wrap_compute_batch_norm(topi_compute):

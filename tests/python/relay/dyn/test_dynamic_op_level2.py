@@ -27,6 +27,8 @@ from test_dynamic_op_level3 import verify_func
 import tvm.topi.testing
 from tvm.relay.testing import run_infer_type
 
+import pytest # for lp norm
+
 executor_kind = tvm.testing.parameter("debug", "vm")
 
 
@@ -207,5 +209,72 @@ def test_dyn_pad(executor_kind):
     verify_pad_default_fill((2, 7), ((1, 4), (2, 2)), "int32")
 
 
+# @tvm.testing.uses_gpu
+def test_dyn_lp_norm(executor_kind):
+    def verify_lp_norm(dshape, input_shape, ord_val, axis, keepdims, dtype):
+        tvm_axis = (axis,) if isinstance(axis, int) else axis
+        x = relay.var("x", relay.TensorType(dshape, dtype))
+        ord_var = relay.var("ord", relay.TensorType((), "float32"))
+        
+        # Creates the expression (routes to dyn.nn.lp_norm)
+        y = relay.nn.lp_norm(x, ord_var, tvm_axis, keepdims, dtype)
+        
+        func = relay.Function([x, ord_var], y)
+        func = run_infer_type(func)
+
+        # using dshape to calculate the output_shape
+        axis_shape = list(range(len(dshape))) if tvm_axis is None else list(tvm_axis)
+        for i in range(len(axis_shape)):
+            if axis_shape[i] < 0:
+                axis_shape[i] += len(dshape)
+        if len(axis_shape) != len(set(axis_shape)):
+	        raise ValueError("axis values must be unique")
+
+        if keepdims:
+            out_shape = list(dshape)
+            for d in range(len(axis_shape)):
+                out_shape[axis_shape[d]] = 1
+        else:
+            out_shape = []
+            for i in range(len(dshape)):
+                if i not in axis_shape:
+                    out_shape.append(dshape[i])
+
+        assert func.body.checked_type == relay.TensorType(tuple(out_shape), dtype)
+
+        # Generate reference NumPy results
+        x_data = np.random.uniform(low=0.5, high=5.0, size=input_shape).astype(dtype)
+        abs_x = np.abs(x_data)
+        
+        if ord_val == 0:
+            ref_res = np.sum(abs_x != 0, axis=axis, keepdims=keepdims)
+        elif ord_val == float("inf") or ord_val == np.inf:
+            ref_res = np.max(abs_x, axis=axis, keepdims=keepdims)
+        elif ord_val == -float("inf") or ord_val == -np.inf:
+            ref_res = np.min(abs_x, axis=axis, keepdims=keepdims)
+        else:
+            ref_res = np.sum(abs_x ** ord_val, axis=axis, keepdims=keepdims) ** (1.0 / ord_val)
+            
+        ref_res = ref_res.astype(dtype)
+        
+        verify_func(
+            executor_kind,
+            func,
+            [x_data, np.array(ord_val).astype("float32")],
+            ref_res,
+            target_device=[("llvm", tvm.cpu())]
+        )
+    verify_lp_norm((relay.Any(), 3, relay.Any()), (4, 3, 5), 2, 1, False, "float32")
+    verify_lp_norm((relay.Any(), relay.Any()), (2, 3), 2, None, True, "float32")
+    verify_lp_norm((relay.Any(), 4, 3), (2, 4, 3), float("inf"), (1, 2), False, "float32")
+    verify_lp_norm((relay.Any(), relay.Any()), (5, 6), -float("inf"), -1, False, "float32")
+    verify_lp_norm((relay.Any(), relay.Any(), relay.Any()), (3, 2, 4), 3.5, 0, False, "float32")
+    verify_lp_norm((relay.Any(), 5, relay.Any()), (2, 5, 3), 5.6, (0, 2), True, "float32")
+    verify_lp_norm((relay.Any(), relay.Any()), (3, 4), -4.2, 1, True, "float64")
+    verify_lp_norm((relay.Any(), 3, relay.Any(), relay.Any()), (1, 3, 4, 2), -6.9, None, False, "float32")
+    verify_lp_norm((relay.Any(), relay.Any()), (5, 5), 0, None, True, "float32")
+    verify_lp_norm((), (), 2, None, False, "float32")
+
+    
 if __name__ == "__main__":
     tvm.testing.main()

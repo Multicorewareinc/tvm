@@ -26,6 +26,12 @@ from tvm.te.hybrid import script
 from ...op import register_shape_func, register_compute
 from ...op import register_injective_schedule, register_broadcast_schedule
 
+# imports for lp_norm
+from ...op import register_schedule
+from tvm.target import generic_func # to import schedule function written for generic
+from tvm.topi.utils import get_const_tuple # to extract the list from (tuple-form) axis
+from tvm.relay.op._tensor import _convert_shape # to convert list to TVM tensor 
+
 # upsampling
 @register_compute("dyn.nn.upsampling")
 def compute_upsampling(attrs, inputs, out_dtype):
@@ -63,10 +69,25 @@ def compute_upsampling3d(attrs, inputs, out_dtype):
         )
     ]
 
+@register_compute("dyn.nn.lp_norm")
+def compute_lp_norm(attrs, inputs, out_dtype):
+    target_dtype = out_dtype.dtype if out_dtype is not None else inputs[0].dtype
+    return [topi.nn.lp_norm(inputs[0], inputs[1], attrs.axis, attrs.keepdims, target_dtype)]
+
 
 register_injective_schedule("dyn.nn.upsampling")
 register_injective_schedule("dyn.nn.upsampling3d")
 register_broadcast_schedule("dyn.nn.pad")
+
+@generic_func
+def lp_norm_schedule(attrs, outs, target):
+    return topi.generic.schedule_lp_norm(outs)
+
+@lp_norm_schedule.register(["cpu"])
+def _lp_norm_schedule_cpu(attrs, outs, target):
+    return topi.x86.schedule_lp_norm(outs)
+
+register_schedule("dyn.nn.lp_norm", lp_norm_schedule)
 
 #####################
 #  Shape functions  #
@@ -155,3 +176,15 @@ def pad_shape_func(attrs, inputs, data):
     Shape function for dynamic pad op.
     """
     return [_dyn_pad_shape_func(inputs[0], inputs[1])]
+
+
+# lp_norm
+from tvm.relay.op.nn._nn import _create_axis_record, _lp_norm_shape_func
+
+@register_shape_func("dyn.nn.lp_norm", False)
+def lp_norm_shape_func(attrs, inputs, _):
+    """
+    Shape function for lp_norm op.
+    """
+    axis_record = _create_axis_record(attrs, inputs)
+    return [_lp_norm_shape_func(inputs[0], convert(axis_record))]

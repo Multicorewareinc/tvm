@@ -900,6 +900,23 @@ def schedule_batch_norm(outs):
     return _default_schedule(outs, False)
 
 
+def schedule_lp_norm(outs):
+    """Schedule for lp_norm
+
+    Parameters
+    ----------
+    outs: Array of Tensor
+          The computation graph description of sparse_transpose
+          in the format of an array of tensors.
+
+    Returns
+    -------
+    sch: Schedule
+        The computation schedule for the op.
+    """
+    return _default_schedule(outs, False)
+
+
 def schedule_correlation_nchw(outs):
     """Schedule for correlation_nchw
 

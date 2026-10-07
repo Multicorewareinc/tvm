@@ -1306,6 +1306,31 @@ struct DropoutAttrs : public tvm::AttrsNode<DropoutAttrs> {
   }
 };  // struct DropoutAttrs
 
+/*! \brief Attributes used in lp_norm operator */
+struct LpNormAttrs : public tvm::AttrsNode<LpNormAttrs> {
+  Optional<FloatImm> ord;
+  Array<Integer> axis;
+  bool keepdims;
+  DataType dtype;
+
+  TVM_DECLARE_ATTRS(LpNormAttrs, "relay.attrs.LpNormAttrs") {
+    TVM_ATTR_FIELD(ord)
+        .describe("Order of LP Normalization, based on which formula of computation varies")
+        .set_default(NullValue<Optional<FloatImm>>());
+    TVM_ATTR_FIELD(axis)
+        .describe("Specify along which dimension (say, row, col or None meaning to flatten)")
+        .set_default(NullValue<Array<Integer>>());
+    TVM_ATTR_FIELD(keepdims)
+        .describe("Specify to maintain the input so as to avoid broadcast errors.")
+        .set_default(false);
+    TVM_ATTR_FIELD(dtype)
+        .describe(
+            "Specify the output data type explicitly to proceed with computations as per the "
+            "output data type")
+        .set_default(NullValue<DataType>());
+  }
+};
+
 /*! \brief Attributes used in batch_norm operator */
 struct BatchNormAttrs : public tvm::AttrsNode<BatchNormAttrs> {
   int axis;

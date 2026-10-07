@@ -857,3 +857,16 @@ def batch_norm_strategy_cpu(attrs, inputs, out_type, target):
         name="batch_norm.cpu",
     )
     return strategy
+
+
+@lp_norm_strategy.register(["cpu"])
+def lp_norm_strategy_cpu(attrs, inputs, out_type, target):
+    """lp_norm x86 strategy"""
+    strategy = _op.OpStrategy()
+    strategy.add_implementation(
+        wrap_compute_lp_norm(topi.nn.lp_norm),
+        wrap_topi_schedule(topi.x86.schedule_lp_norm),
+        name="lp_norm.cpu",
+    )
+    return strategy
+    

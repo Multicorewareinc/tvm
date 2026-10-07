@@ -134,3 +134,43 @@ def schedule_batch_norm(outs):
         s[div].compute_inline()
         s[substract].compute_inline()
     return s
+
+def schedule_lp_norm(outs):
+    # out = sum(abs(x)^(ord))^(1 / ord)
+   
+    out = outs.op if isinstance(outs, te.tensor.Tensor) else outs[0].op
+    s = te.create_schedule(out)
+    visited = set()
+    
+    def _traverse(op):
+        # If the op is visited, scheduling is not reapplied
+        if op in visited:
+            return
+        visited.add(op)
+        
+        # recursively scheduled compute ops
+        for tensor in op.input_tensors:
+            if isinstance(tensor.op, te.ComputeOp):
+                _traverse(tensor.op)
+
+        # Scheduling applied only to compute ops
+        if isinstance(op, te.ComputeOp):
+            # Inlining applied only to intermediate injective ops
+            if op != out:
+                if len(op.reduce_axis) == 0:
+                    s[op].compute_inline()
+                else:
+                    if len(op.axis) > 0:
+                        # Fusion and parallelism applied only for tensors
+                        fused = s[op].fuse(*op.axis)
+                        s[op].parallel(fused)
+            else:
+                if len(op.axis) == 1:
+                    s[op].parallel(op.axis[0])
+                else:
+                    if len(op.axis) > 1:
+                        fused = s[op].fuse(*op.axis)
+                        s[op].parallel(fused)
+                        
+    _traverse(out)
+    return s
